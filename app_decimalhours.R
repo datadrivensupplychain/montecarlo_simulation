@@ -1,9 +1,9 @@
 #shiny montecarlo simulation ----
 library(tidyverse)
 library(magrittr)
-library(shiny)#
+library(shiny)
 library(DT)
-# Define UI for application that draws a histogram
+
 ui <- fluidPage(
     # Application title
     titlePanel("Restaurant Reservations Simulation"),
@@ -58,7 +58,7 @@ ui <- fluidPage(
             
         )
     ) )
-# Define server logic required to draw a histogram
+
 server <- function(input, output) {
     #pull them all together...
     outdf_r <- reactive({
@@ -158,8 +158,6 @@ server <- function(input, output) {
             scale_x_continuous(breaks=seq(-100,100,5)) + xlab("Bob's Commute Time")
     })
     
-    #ralphcommute_histogram
-    #bobcommute_histogram
     
     output$freqtable <- DT::renderDataTable({ outdf_r() %>% dplyr::group_by(MadeItInTime) %>% 
             summarise(Count=n()) %>% 
