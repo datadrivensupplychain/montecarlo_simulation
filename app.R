@@ -45,9 +45,7 @@ ui <- fluidPage(
       numericInput("walktimesd",
                    "Walk Time to Restaurant Standard Deviation:",
                    min=1,
-                   value=2),
-				   
-	downloadButton("downloadData", "Download")
+                   value=2)
 
 				   
 				   ),
@@ -225,6 +223,7 @@ server <- function(input, output) {
                  fill = dplyr::if_else(walk_time_duration_minutes>=input$walktimemean,"Above Average","Below Average")))+
       geom_histogram(bins=100) + ggtitle("Walk Time To Restaurant Histogram (1SD & 2SD Marked, 3SD Clipped)") +
       guides(fill=guide_legend(title="Walk Time Above or Below Average"))+
+      xlab("Walk Time To Restaurant")+
 	  scale_x_continuous(breaks=seq(-100,100,1), limits = c((input$walktimemean- 3*input$walktimesd),(input$walktimemean + 3*input$walktimesd)))+
 	  geom_vline(xintercept=(input$walktimemean- input$walktimesd),color="black") +
 	  geom_vline(xintercept=(input$walktimemean- 2*input$walktimesd),color="black") +
