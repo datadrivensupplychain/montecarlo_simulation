@@ -56,7 +56,10 @@ ui <- fluidPage(
       plotOutput('arrivalhistogram'),
       plotOutput('ralphcommute_histogram'),
       plotOutput('bobcommute_histogram'),
-      plotOutput('walktime_histogram') 
+      plotOutput('walktime_histogram'),
+      plotOutput('arrivaltime_cdf'),
+      plotOutput('arrivaltime_cdf_madeitintime'),
+      plotOutput('arrivaltime_cdf_didntmakeitintime')
 	 
       
     )
@@ -104,7 +107,18 @@ server <- function(input, output) {
                     walk_time_duration_minutes,
                     Arrival_Restaurant
       ) %>%
-      dplyr::mutate(MadeItInTime = dplyr::if_else(Arrival_Restaurant <= 18.25,"Yes","No")) 
+      dplyr::mutate(MadeItInTime = dplyr::if_else(Arrival_Restaurant <= 18.25,"Yes","No")) %>%
+	  dplyr::ungroup() %>%
+	  #find percentile of arrival time
+	  dplyr::arrange(Arrival_Restaurant) %>%
+	  dplyr::mutate(rownum = dplyr::row_number()) %>%
+	  dplyr::mutate(ArrivalTime_Percentile = rownum/max(rownum)) %>%
+	  #find percentile of arrival time, by made it / didn't make it group
+	  dplyr::group_by(MadeItInTime) %>%
+	  dplyr::mutate(rownum_MadeitGroup = dplyr::row_number()) %>%
+	  dplyr::mutate(ArrivalTime_MadeItGroup_Percentile = rownum_MadeitGroup/max(rownum_MadeitGroup)) %>%
+	  #rearrange at random
+	  dplyr::sample_frac(size=1) 
   })
   
   output$quantile_ralph <- DT::renderDT({
@@ -165,18 +179,70 @@ server <- function(input, output) {
                     "Later Arrival" =  Later_Arrival_Home , 
                     "Walk Time to Restaurant (Minutes)" = walk_time_duration_minutes_present,
                     "Arrival Time At Restaurant"= Arrival_Restaurant,
-                    "Made the 6:15pm Reservation?" =MadeItInTime
-      ) 
+                    "Made the 6:15pm Reservation?" =MadeItInTime,
+                    rownum,ArrivalTime_Percentile,rownum_MadeitGroup,ArrivalTime_MadeItGroup_Percentile)
+       
     outdf_prettified
   })
   
   output$arrivalhistogram <- renderPlot({
     outdf_r() %>%
       ggplot(aes(x = Arrival_Restaurant,fill=MadeItInTime)) +
-      geom_histogram(bins=100)+scale_x_continuous(breaks=seq(0,24,(1/12))) + ggtitle("Arrival Time at Restaurant, X-Axis Breaks are 5-Minute Intervals")+
-	  scale_x_continuous(breaks=seq(0,24,(1/12)))
+      geom_histogram(bins=100)+scale_x_continuous(breaks=seq(0,24,(1/12))) + ggtitle("Arrival Time at Restaurant, X-Axis Breaks are 5-Minute Intervals")
 	  
   })
+  
+  
+  #cdf of all arrival times
+  output$arrivaltime_cdf <- renderPlot({
+    outdf_r() %>%
+    
+      ggplot(aes(x = Arrival_Restaurant,y=ArrivalTime_Percentile))+
+      geom_line()+
+      scale_x_continuous(breaks=seq(0,24,(1/12)))+
+      scale_y_continuous(breaks=seq(0,1,0.02))+
+      #vertical line at 6:15pm, the time we're supposed to arrive
+      geom_vline(xintercept = 18.25) +
+      #horizontal line at 50th percentile
+      geom_hline(yintercept= 0.5) +
+      ggtitle("CDF of All Arrival Times. 6:15pm and Median Arrival Times Marked With Lines")
+    
+  })
+  
+  
+  
+  output$arrivaltime_cdf_madeitintime <- renderPlot({
+    outdf_r() %>%
+      dplyr::filter(MadeItInTime=="Yes") %>%
+      ggplot(aes(x = Arrival_Restaurant,y=ArrivalTime_MadeItGroup_Percentile))+
+      geom_line()+
+      scale_x_continuous(breaks=seq(0,24,(1/12)))+
+      scale_y_continuous(breaks=seq(0,1,0.02))+
+      #vertical line at 6:15pm, the time we're supposed to arrive
+      geom_vline(xintercept = 18.25) +
+      #horizontal line at 50th percentile
+      geom_hline(yintercept= 0.5) +
+      ggtitle("CDF of Arrival Times Up to 6:15pm. 6:15pm and Median Arrival Times Marked With Lines")
+    
+  })
+  
+  output$arrivaltime_cdf_didntmakeitintime <- renderPlot({
+    outdf_r() %>%
+      dplyr::filter(MadeItInTime=="No") %>%
+      ggplot(aes(x = Arrival_Restaurant,y=ArrivalTime_MadeItGroup_Percentile))+
+      geom_line()+
+      scale_x_continuous(breaks=seq(0,24,(1/12)))+
+      scale_y_continuous(breaks=seq(0,1,0.02))+
+      #vertical line at 6:15pm, the time we're supposed to arrive
+      geom_vline(xintercept = 18.25) +
+      #horizontal line at 50th percentile
+      geom_hline(yintercept= 0.5) +
+      ggtitle("CDF of Arrival Times After 6:15pm. 6:15pm and Median Arrival Times Marked With Lines")
+    
+  })
+  
+  
+  
   
   output$ralphcommute_histogram <- renderPlot({
     outdf_r() %>%
@@ -232,6 +298,8 @@ server <- function(input, output) {
 	  geom_vline(xintercept=(input$walktimemean+ 2*input$walktimesd),color="black") # +
 	 # geom_vline(xintercept=(input$walktimemean+ 3*input$walktimesd),color="black") 
   })
+  
+
   
   
   output$freqtable <- DT::renderDataTable({ outdf_r() %>% dplyr::group_by(MadeItInTime) %>% 
