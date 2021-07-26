@@ -2,6 +2,7 @@
 library(tidyverse)
 library(magrittr)
 library(shiny)
+library(shinyTime)
 library(DT)
 
 ui <- fluidPage(
@@ -17,16 +18,16 @@ ui <- fluidPage(
                    "Number of days to simulate:",
                    min = 1,
                    max = Inf,
-                   value = 10000),
+                   value = 5000),
 				   
-      numericInput("ralphdeparttime",
-                   "Ralph Departs From Work (Fractional Hours, so 17.25 = 17:15, 5:15pm)",
-                   value = 17.5,
-                   step=0.25),
-      numericInput("bobdeparttime",
-                   "Neighbor Bob Departs From Work (Fractional Hours, so 17.25 = 17:15, 5:15pm):",
-                   value = 17.5,
-                   step=0.25),
+      timeInput("ralphdeparttime_time",
+                   "Ralph Departs From Work:",
+                   value =  strptime("12:30:00", format="%T", tz="America/Chicago"), minute.steps=5),
+                   
+	
+	    timeInput("bobdeparttime_time",
+	          "Bob Departs From Work:",
+	          value =  strptime("12:30:00", format="%T", tz="America/Chicago"), minute.steps=5),
 				   
 				   
       numericInput("commutemean",
@@ -42,6 +43,7 @@ ui <- fluidPage(
                    "Average Walk Time to Restaurant:",
                    min=1,
                    value=10),
+	
       numericInput("walktimesd",
                    "Walk Time to Restaurant Standard Deviation:",
                    min=1,
@@ -69,15 +71,20 @@ server <- function(input, output) {
   #pull them all together...
   outdf_r <- reactive({
   
-  #we depart from our respective offices at (possibly) different times.
+    #convert the time inputs into fractional hours
+    ralphdeparttime_frachours <- lubridate::hour(input$ralphdeparttime_time) + lubridate::minute(input$ralphdeparttime_time)/60
+    bobdeparttime_frachours <- lubridate::hour(input$bobdeparttime_time) + lubridate::minute(input$bobdeparttime_time)/60
+
+      #we depart from our respective offices at (possibly) different times.
   #our commute times are drawn from the same distribution
-    ralph_depart_time <- rep(input$ralphdeparttime,input$iterations)
+
+	ralph_depart_time <-rep(ralphdeparttime_frachours,input$iterations)
 	
     ralph_commute_duration_minutes <-   rnorm(n=input$iterations,
                                               mean=input$commutemean,
                                               sd=input$commutesd)
 											  
-    bob_depart_time <-  rep(input$bobdeparttime,input$iterations)
+	bob_depart_time <- rep(bobdeparttime_frachours,input$iterations)
 	
     bob_commute_duration_minutes <- rnorm(n=input$iterations,
                                           mean=input$commutemean,
@@ -117,7 +124,9 @@ server <- function(input, output) {
 	  dplyr::group_by(MadeItInTime) %>%
 	  dplyr::mutate(rownum_MadeitGroup = dplyr::row_number()) %>%
 	  dplyr::mutate(ArrivalTime_MadeItGroup_Percentile = rownum_MadeitGroup/max(rownum_MadeitGroup)) %>%
+	  
 	  #rearrange at random
+	  dplyr::ungroup() %>%
 	  dplyr::sample_frac(size=1) 
   })
   
@@ -179,8 +188,8 @@ server <- function(input, output) {
                     "Later Arrival" =  Later_Arrival_Home , 
                     "Walk Time to Restaurant (Minutes)" = walk_time_duration_minutes_present,
                     "Arrival Time At Restaurant"= Arrival_Restaurant,
-                    "Made the 6:15pm Reservation?" =MadeItInTime,
-                    rownum,ArrivalTime_Percentile,rownum_MadeitGroup,ArrivalTime_MadeItGroup_Percentile)
+                    "Made the 6:15pm Reservation?" =MadeItInTime)  #,
+                    #rownum,ArrivalTime_Percentile,rownum_MadeitGroup,ArrivalTime_MadeItGroup_Percentile)
        
     outdf_prettified
   })
@@ -201,11 +210,24 @@ server <- function(input, output) {
       geom_line()+
       scale_x_continuous(breaks=seq(0,24,(1/12)))+
       scale_y_continuous(breaks=seq(0,1,0.02))+
-      #vertical line at 6:15pm, the time we're supposed to arrive
-      geom_vline(xintercept = 18.25) +
-      #horizontal line at 50th percentile
-      geom_hline(yintercept= 0.5) +
-      ggtitle("CDF of All Arrival Times. 6:15pm and Median Arrival Times Marked With Lines")
+      #vertical line at mean time
+      geom_vline(xintercept = mean(outdf_r()$Arrival_Restaurant),
+                 color='blue') +
+      #vertical line at median time
+      geom_vline(xintercept = median(outdf_r()$Arrival_Restaurant),
+                 color='green') +
+      ggtitle(paste(
+        "CDF of Arrival Times. Mean (Blue) ",
+        mean(outdf_r()$Arrival_Restaurant) %/%1 - 12,
+        ":",
+        ifelse(round((mean(outdf_r()$Arrival_Restaurant) %%1)*60)<10,"0",""),
+        round(mean(outdf_r()$Arrival_Restaurant) %%1 *60),
+        "pm & Median (Green) ",
+        median(outdf_r()$Arrival_Restaurant) %/%1 - 12,
+        ":",
+        ifelse(round((median(outdf_r()$Arrival_Restaurant) %%1)*60)<10,"0",""),
+        round(median(outdf_r()$Arrival_Restaurant) %%1 *60),
+        "pm",sep=''))
     
   })
   
@@ -218,11 +240,24 @@ server <- function(input, output) {
       geom_line()+
       scale_x_continuous(breaks=seq(0,24,(1/12)))+
       scale_y_continuous(breaks=seq(0,1,0.02))+
-      #vertical line at 6:15pm, the time we're supposed to arrive
-      geom_vline(xintercept = 18.25) +
-      #horizontal line at 50th percentile
-      geom_hline(yintercept= 0.5) +
-      ggtitle("CDF of Arrival Times Up to 6:15pm. 6:15pm and Median Arrival Times Marked With Lines")
+      #vertical line at mean time
+      geom_vline(xintercept = mean((outdf_r() %>% dplyr::filter(MadeItInTime=="Yes"))$Arrival_Restaurant),
+                 color='blue') +
+      #vertical line at median time
+      geom_vline(xintercept = median((outdf_r() %>% dplyr::filter(MadeItInTime=="Yes"))$Arrival_Restaurant),
+                 color='green') +
+      ggtitle(paste(
+        "CDF of Arrival Times Before 6:15pm. Mean (Blue) ",
+        mean((outdf_r() %>% dplyr::filter(MadeItInTime=="Yes"))$Arrival_Restaurant) %/%1 - 12,
+        ":",
+        ifelse(round((mean((outdf_r() %>% dplyr::filter(MadeItInTime=="Yes"))$Arrival_Restaurant) %%1)*60)<10,"0",""),
+        round((mean((outdf_r() %>% dplyr::filter(MadeItInTime=="Yes"))$Arrival_Restaurant) %%1)*60),
+        "pm & Median (Green) ",
+        median((outdf_r() %>% dplyr::filter(MadeItInTime=="Yes"))$Arrival_Restaurant) %/% 1 - 12,
+        ":",
+        ifelse(round((median((outdf_r() %>% dplyr::filter(MadeItInTime=="Yes"))$Arrival_Restaurant) %%1)*60)<10,"0",""),
+        round((median((outdf_r() %>% dplyr::filter(MadeItInTime=="Yes"))$Arrival_Restaurant) %%1)*60),
+        "pm",sep=''))
     
   })
   
@@ -233,11 +268,24 @@ server <- function(input, output) {
       geom_line()+
       scale_x_continuous(breaks=seq(0,24,(1/12)))+
       scale_y_continuous(breaks=seq(0,1,0.02))+
-      #vertical line at 6:15pm, the time we're supposed to arrive
-      geom_vline(xintercept = 18.25) +
-      #horizontal line at 50th percentile
-      geom_hline(yintercept= 0.5) +
-      ggtitle("CDF of Arrival Times After 6:15pm. 6:15pm and Median Arrival Times Marked With Lines")
+      #vertical line at mean time
+      geom_vline(xintercept = mean((outdf_r() %>% dplyr::filter(MadeItInTime=="No"))$Arrival_Restaurant),
+                 color='blue') +
+      #vertical line at median time
+      geom_vline(xintercept = median((outdf_r() %>% dplyr::filter(MadeItInTime=="No"))$Arrival_Restaurant),
+                 color='green') +
+      ggtitle(paste(
+        "CDF of Arrival Times After 6:15pm. Mean (Blue) ",
+        mean((outdf_r() %>% dplyr::filter(MadeItInTime=="No"))$Arrival_Restaurant) %/%1 - 12,
+        ":",
+        ifelse(round((mean((outdf_r() %>% dplyr::filter(MadeItInTime=="No"))$Arrival_Restaurant) %%1)*60)<10,"0",""),
+        round((mean((outdf_r() %>% dplyr::filter(MadeItInTime=="No"))$Arrival_Restaurant) %%1)*60),
+        "pm & Median (Green) ",
+        median((outdf_r() %>% dplyr::filter(MadeItInTime=="No"))$Arrival_Restaurant) %/% 1 - 12,
+        ":",
+        ifelse(round((median((outdf_r() %>% dplyr::filter(MadeItInTime=="No"))$Arrival_Restaurant) %%1)*60)<10,"0",""),
+        round((median((outdf_r() %>% dplyr::filter(MadeItInTime=="No"))$Arrival_Restaurant) %%1)*60),
+        "pm",sep=''))
     
   })
   
@@ -256,10 +304,9 @@ server <- function(input, output) {
 	  scale_x_continuous(breaks=seq(-100,100,2), limits = c((input$commutemean- 3*input$commutesd),(input$commutemean + 3*input$commutesd)))+
 	  geom_vline(xintercept=(input$commutemean- input$commutesd),color="black") +
 	  geom_vline(xintercept=(input$commutemean- 2*input$commutesd),color="black") +
-	 # geom_vline(xintercept=(input$commutemean- 3*input$commutesd),color="black") +
 	  geom_vline(xintercept=(input$commutemean+ input$commutesd),color="black") +
-	  geom_vline(xintercept=(input$commutemean+ 2*input$commutesd),color="black") #+ 
-	 # geom_vline(xintercept=(input$commutemean+ 3*input$commutesd),color="black") 
+	  geom_vline(xintercept=(input$commutemean+ 2*input$commutesd),color="black") 
+	  
   })
   
   output$bobcommute_histogram <- renderPlot({
@@ -275,11 +322,8 @@ server <- function(input, output) {
 	  scale_x_continuous(breaks=seq(-100,100,2), limits = c((input$commutemean- 3*input$commutesd),(input$commutemean + 3*input$commutesd)))+
 	  geom_vline(xintercept=(input$commutemean- input$commutesd),color="black") +
 	  geom_vline(xintercept=(input$commutemean- 2*input$commutesd),color="black") +
-	 # geom_vline(xintercept=(input$commutemean- 3*input$commutesd),color="black") +
 	  geom_vline(xintercept=(input$commutemean+ input$commutesd),color="black") +
-	  geom_vline(xintercept=(input$commutemean+ 2*input$commutesd),color="black") #+
-	 # geom_vline(xintercept=(input$commutemean+ 3*input$commutesd),color="black") 
-	  
+	  geom_vline(xintercept=(input$commutemean+ 2*input$commutesd),color="black")
   })
   
   
@@ -293,10 +337,8 @@ server <- function(input, output) {
 	  scale_x_continuous(breaks=seq(-100,100,1), limits = c((input$walktimemean- 3*input$walktimesd),(input$walktimemean + 3*input$walktimesd)))+
 	  geom_vline(xintercept=(input$walktimemean- input$walktimesd),color="black") +
 	  geom_vline(xintercept=(input$walktimemean- 2*input$walktimesd),color="black") +
-	 # geom_vline(xintercept=(input$walktimemean- 3*input$walktimesd),color="black") +
 	  geom_vline(xintercept=(input$walktimemean+ input$walktimesd),color="black") +
-	  geom_vline(xintercept=(input$walktimemean+ 2*input$walktimesd),color="black") # +
-	 # geom_vline(xintercept=(input$walktimemean+ 3*input$walktimesd),color="black") 
+	  geom_vline(xintercept=(input$walktimemean+ 2*input$walktimesd),color="black")
   })
   
 
