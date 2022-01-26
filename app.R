@@ -17,9 +17,6 @@ ui <- fluidPage(
     sidebarPanel(
 	width = 3,
 
-#	    HTML("<b> Brought to you by: <b>"),
-	
-#	tags$a(href="http://www.datadrivensupplychain.com", "Data Driven Supply Chain LLC"),
 	
       numericInput("iterations",
                    "Number of days to simulate:",
@@ -29,12 +26,12 @@ ui <- fluidPage(
 				   
       timeInput("ralphdeparttime_time",
                    "Ralph Departs From Work:",
-                   value =  strptime("12:30:00", format="%T", tz="America/Chicago"), minute.steps=5),
+                   value =  strptime("11:30:00", format="%T", tz="America/Chicago"), minute.steps=5),
                    
 	
 	    timeInput("bobdeparttime_time",
 	          "Bob Departs From Work:",
-	          value =  strptime("12:30:00", format="%T", tz="America/Chicago"), minute.steps=5),
+	          value =  strptime("11:30:00", format="%T", tz="America/Chicago"), minute.steps=5),
 				   
 				   
       numericInput("commutemean",
@@ -195,8 +192,7 @@ server <- function(input, output) {
                     "Later Arrival" =  Later_Arrival_Home , 
                     "Walk Time to Restaurant (Minutes)" = walk_time_duration_minutes_present,
                     "Arrival Time At Restaurant"= Arrival_Restaurant,
-                    "Made the 6:15pm Reservation?" =MadeItInTime)  #,
-                    #rownum,ArrivalTime_Percentile,rownum_MadeitGroup,ArrivalTime_MadeItGroup_Percentile)
+                    "Made the 6:15pm Reservation?" =MadeItInTime)  
        
     outdf_prettified
   })
