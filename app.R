@@ -7,13 +7,20 @@ library(DT)
 
 ui <- fluidPage(
   # Application title
-  titlePanel("Restaurant Reservations Simulation"),
+  #titlePanel("Restaurant Reservations Simulation "),
+  titlePanel(HTML(paste0("Restaurant Reservations Simulation, ",
+                        #"<br>",
+                        "Brought To You By ",
+                        "<a href='http://www.datadrivensupplychain.com' target='_blank'>Data Driven Supply Chain LLC</a>"))),
   # sidebar for inputs
   sidebarLayout(
     sidebarPanel(
 	width = 3,
 
- 
+#	    HTML("<b> Brought to you by: <b>"),
+	
+#	tags$a(href="http://www.datadrivensupplychain.com", "Data Driven Supply Chain LLC"),
+	
       numericInput("iterations",
                    "Number of days to simulate:",
                    min = 1,
@@ -69,7 +76,7 @@ ui <- fluidPage(
 
 server <- function(input, output) {
   #pull them all together...
-  outdf_r <- reactive({
+  outdf_r <- debounce( r = reactive({
   
     #convert the time inputs into fractional hours
     ralphdeparttime_frachours <- lubridate::hour(input$ralphdeparttime_time) + lubridate::minute(input$ralphdeparttime_time)/60
@@ -128,7 +135,7 @@ server <- function(input, output) {
 	  #rearrange at random
 	  dplyr::ungroup() %>%
 	  dplyr::sample_frac(size=1) 
-  })
+  }), millis = 1500)
   
   output$quantile_ralph <- DT::renderDT({
   ralphquantile <- as.data.frame(quantile(outdf_r()$ralph_commute_duration_minutes,seq(0,1,0.01)))
